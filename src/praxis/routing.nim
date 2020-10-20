@@ -9,6 +9,8 @@ proc calculatePriority(elements: seq[string]): int =
   result = 0
   for elem in elements:
     result = result shl 2
+    if elem == "":
+      continue
     if ':' in elem:
       if "re" in elem:
         result += 1
@@ -59,13 +61,13 @@ macro route*(meths, path, body: untyped): untyped =
   let priority = calculatePriority(path.strVal.split("/"))
 
   let calling = quote do:
-    if await `ident`(req, res):
+    if await `ident`(`req`, `res`):
       return
 
   routing.add((priority, calling))
 
   quote do:
-    proc `ident`(`req`: Request, `res`: Response): Future[bool] {.async.} =
+    proc `ident`(`req`: Request, `res`: Response): Future[bool] {.async, inline.} =
       if `req`.reqMethod notin `methods`:
         return false
 
@@ -74,10 +76,18 @@ macro route*(meths, path, body: untyped): untyped =
       if not matched:
         return false
       `body`
+      return true
 
 macro dispatch*(): untyped =
+  let req = newIdentNode("req")
+  let res = newIdentNode("res")
+
   let sort = routing.sorted(proc (a, b: (int, NimNode)): int = b[0] - a[0])
-  result = newStmtList()
+  let body = newStmtList()
 
   for node in sort:
-    result.add(node[1])
+    body.add(node[1])
+
+  quote do:
+    proc callback(`req`: Request, `res`: Response) {.async, gcsafe, inject.} =
+      `body`

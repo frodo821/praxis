@@ -1,16 +1,27 @@
-import asyncdispatch
+import asyncdispatch, macros
 import ./praxis/http
 import ./praxis/routing
+
+export asyncdispatch
+export http
 export routing except dispatch
 
-proc run*(host: string, port: 1..65535, maxHandlers: int) =
-  proc cb(req: Request, res: Response) {.async, gcsafe.} =
-    dispatch()
+macro run*(host: string = "localhost", port: 1..65535 = 8080, maxHandlers: int = 10000) =
+  let hostStr = host.strVal
+  let portNum = port.intVal
+  let maxHandlersNum = maxHandlers.intVal
 
-  let server = createServer(
-    address = host,
-    port = port,
-    maxHandlers = maxHandlers)
+  quote do:
+    proc main() {.inject.} =
+      dispatch()
 
-  asyncCheck server.serve(cb)
-  runForever()
+      let server = createServer(
+        address = `hostStr`,
+        port = `portNum`,
+        maxHandlers = `maxHandlersNum`)
+
+      asyncCheck server.serve(callback)
+      runForever()
+
+    when isMainModule:
+      main()
